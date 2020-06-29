@@ -1,32 +1,39 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
+	"log"
 	"net/http"
 )
 
-func main()  {
-	engine:=gin.Default()
+type User struct {
+	Name string `form:"name" binding:"required,len=6"`
+	Age  int    `form:"age" binding:"numeric,min=18,max=100"`
+}
 
-	engine.LoadHTMLGlob("templete/*")
-	
-	engine.GET("index", func(context *gin.Context) {
-		context.HTML(http.StatusOK,"index.html",gin.H{
-			"name":"admin",
-			"age":24,
-		})
+func main() {
+	engine := gin.Default()
+	engine.LoadHTMLGlob("./templete/*")
+	engine.Static("upload", "./static")
+
+	engine.GET("/upload", func(context *gin.Context) {
+		context.HTML(http.StatusOK, "upload.html", nil)
 	})
 
-	engine.GET("/helloWorld", func(context *gin.Context) {
-		context.String(http.StatusOK,"hello world!")
-	})
+	engine.POST("/upload", func(context *gin.Context) {
+		f, err := context.FormFile("file")
+		if err != nil {
+			log.Println()
+		}
+		err = context.SaveUploadedFile(f, fmt.Sprintf("uploads/%s", f.Filename))
+		fmt.Println(f.Filename + "------------")
+		if err != nil {
+			context.String(http.StatusOK, "upload file failed->%v", err.Error())
+		} else {
+			context.String(http.StatusOK, "upload success")
+		}
 
-	engine.GET("/json", func(context *gin.Context) {
-		context.JSON(http.StatusOK,gin.H{
-			"name":"admin",
-			"age":24,
-		})
 	})
-
 	engine.Run()
 }
