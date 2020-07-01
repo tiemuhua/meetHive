@@ -5,14 +5,20 @@
     <title>Title</title>
 </head>
 <body>
-    <form action="/upload" method="post" enctype="multipart/form-data">
-        <input name="userName" type="text">
-        <input name="passWord" type="text">
-        <select>
-            <option value="login"> login </option>
-            <option value="register"> register </option>
-        </select>
-        <input type="submit" value="submit" formmethod="post" formaction="TODO">//TODO
-    </form>
+<div>
+    {{.promptInformation}}
+</div>
+<form action="/upload" method="post" enctype="multipart/form-data">
+    userName: <input name="userName" type="text">
+    pass word: <input name="passWord" type="text">
+    pass word again: <input name="passWordAgain" type="text">
+    age: <input name="age" type="number">
+    <select name="loginOrRegister">
+        <option value="login"> login</option>
+        <option value="register"> register</option>
+    </select>
+    <!--input type="submit" value="submit" formmethod="post" formaction="TODO"-->//TODO
+    <input type="submit" value="submit" formmethod="post">//TODO
+</form>
 </body>
 </html>

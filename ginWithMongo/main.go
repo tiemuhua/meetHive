@@ -2,20 +2,22 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
-	//"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"log"
-	//"net/http"
+	"net/http"
 )
 
 type User struct {
-	Name     string
-	PassWord string
-	Age      int
+	Name          string `form:"userName"`
+	PassWord      string `form:"passWord"`
+	PassWordAgain string `form:"passWordAgain" binding:"eqfield=PassWord"`
+	Age           int    `form:"age"`
 }
 
 func newUser(name string, passWord string) User {
@@ -25,41 +27,9 @@ func newUser(name string, passWord string) User {
 	}
 }
 
-var (
-	initialRegisteredUsers = []interface{}{
-		&User{
-			Name:     "tiemuhua",
-			PassWord: "20000202tb",
-			Age:      200,
-		},
-		&User{
-			Name:     "tom",
-			PassWord: "123456",
-			Age:      10,
-		},
-		&User{
-			Name:     "Jack",
-			PassWord: "qwerty",
-			Age:      18,
-		},
-	}
-)
 
 func main() {
-	/*engine := gin.Default()
 
-	engine.LoadHTMLGlob("./login.html")
-
-	engine.GET("/upload", func(context *gin.Context) {
-		context.HTML(http.StatusOK, "./login.html", nil)
-	})
-
-	engine.POST("/upload", func(context *gin.Context) {
-		//TODO
-	})*/
-
-	inputName := "ha"
-	inputPassWord := "glgjssy" //苟利国家生死以
 	url := "mongodb://localhost:27017"
 	dbName := "test"
 	colName := "newUsers"
@@ -67,48 +37,47 @@ func main() {
 	var userCollectionPtr *mongo.Collection
 
 	userCollectionPtr, err = getCollectionPtr(url, dbName, colName)
-	if err != nil {
-		fmt.Println("get collection error")
-	}
 
-	err = userCollectionPtr.Drop(context.Background())
-	if err != nil {
-		log.Fatal(err)
-	}
+	engine := gin.Default()
 
-	// 设置索引
-	/*idx := mongo.IndexModel{
-		Keys:    bsonx.Doc{{"password", bsonx.Int32(1)}},
-		Options: options.Index().SetUnique(true),
-	}
+	engine.LoadHTMLGlob("./login.html")
 
-	var idxRet string
-	idxRet, err = userCollectionPtr.Indexes().CreateOne(context.Background(), idx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("usersCollection.Indexes().CreateOne:", idxRet)*/
+	engine.GET("/upload", func(context *gin.Context) {
+		context.HTML(http.StatusOK, "login.html", gin.H{
+			"promptInformation":"please input your personal message here",
+		})
+	})
 
-	var insertOneResultPtr *mongo.InsertOneResult
-	insertOneResultPtr, err = userCollectionPtr.InsertOne(context.Background(),initialRegisteredUsers[0])
+	engine.POST("/upload", func(context *gin.Context) {
+		var user User
+		var outputMessage string
+		err = context.ShouldBind(&user)
+		//loginOrRegister:=context.Query("loginOrRegister")
+		loginOrRegister := context.PostForm("loginOrRegister")
+		if err != nil {
+			outputMessage = err.Error()
+		} else {
+			if loginOrRegister == "login" {
+				if isUserNameMatchesPassword(userCollectionPtr,user.Name,user.PassWord) {
+					outputMessage="login successfully"
+				} else {
+					outputMessage="user name does not match the password"
+				}
+			} else {
+				err = registerNewUser(userCollectionPtr, user.Name, user.PassWord)
+				if err != nil {
+					outputMessage = user.Name + " has registered successfully"
+				} else {
+					outputMessage = err.Error()
+				}
+			}
+		}
+		context.HTML(http.StatusOK, "login.html", gin.H{
+			"promptInformation": outputMessage,
+		})
+	})
 
-	if err != nil {
-		println("insert one error",insertOneResultPtr.InsertedID)
-	}
-
-	err = registerInitialUsers(userCollectionPtr, initialRegisteredUsers)
-	if err != nil {
-		fmt.Println("register initial users error")
-	}
-
-	registerNewUser(userCollectionPtr, inputName, inputPassWord)
-
-	userExist := isUserNameMatchesPassword(userCollectionPtr, inputName, inputPassWord)
-	if userExist {
-		fmt.Println("user exist")
-	}else {
-		fmt.Println("user do not exist")
-	}
+	engine.Run()
 }
 
 func getCollectionPtr(url string, dbName string, colName string) (*mongo.Collection, error) {
@@ -140,6 +109,18 @@ func registerInitialUsers(collectionPtr *mongo.Collection, initialRegisteredUser
 
 func isUserNameMatchesPassword(collectionPtr *mongo.Collection, name string, passWord string) bool {
 	var usersFound []*User
+	usersFound=usersPtrWithGivenName(collectionPtr,name)
+	fmt.Println("usersFound", len(usersFound))
+	for i := 0; i < len(usersFound); i++ {
+		if usersFound[i].PassWord == passWord {
+			return true
+		}
+	}
+	return false
+}
+
+func usersPtrWithGivenName(collectionPtr *mongo.Collection, name string) []*User {
+	var usersFound []*User
 	usersCursor, err := collectionPtr.Find(context.Background(), bson.M{"name": name})
 	if err != nil {
 		fmt.Println("collection find error")
@@ -147,19 +128,15 @@ func isUserNameMatchesPassword(collectionPtr *mongo.Collection, name string, pas
 
 	usersCursor.All(context.Background(), &usersFound)
 
-	fmt.Println("usersFound",len(usersFound))
-	for i := 0; i < len(usersFound); i++ {
-		if usersFound[i].PassWord == passWord {
-			fmt.Println(usersFound[i].Name)
-			fmt.Println(usersFound[i].PassWord)
-			fmt.Println(usersFound[i].Age)
-			return true
-		}
-	}
-	return false
+	return  usersFound
 }
 
 func registerNewUser(collectionPtr *mongo.Collection, name string, passWord string) error {
+	var previousUsersWithThisName []*User
+	previousUsersWithThisName=usersPtrWithGivenName(collectionPtr,name)
+	if len(previousUsersWithThisName) !=0 {
+		return errors.New("this users name has exists, please change your name")
+	}
 	insertResult, err := collectionPtr.InsertOne(context.Background(), newUser(name, passWord))
 	if err != nil {
 		fmt.Println("insert error", insertResult.InsertedID)
