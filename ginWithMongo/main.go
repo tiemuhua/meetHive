@@ -27,7 +27,6 @@ func newUser(name string, passWord string) User {
 	}
 }
 
-
 func main() {
 
 	url := "mongodb://localhost:27017"
@@ -44,7 +43,7 @@ func main() {
 
 	engine.GET("/upload", func(context *gin.Context) {
 		context.HTML(http.StatusOK, "login.html", gin.H{
-			"promptInformation":"please input your personal message here",
+			"promptInformation": "please input your personal message here",
 		})
 	})
 
@@ -58,10 +57,12 @@ func main() {
 			outputMessage = err.Error()
 		} else {
 			if loginOrRegister == "login" {
-				if isUserNameMatchesPassword(userCollectionPtr,user.Name,user.PassWord) {
-					outputMessage="login successfully"
+				if !userExists(userCollectionPtr,user.Name) {
+					outputMessage="user does not exist"
+				} else if isUserNameMatchesPassword(userCollectionPtr, user.Name, user.PassWord) {
+					outputMessage = "login successfully"
 				} else {
-					outputMessage="user name does not match the password"
+					outputMessage = "user name does not match the password"
 				}
 			} else {
 				err = registerNewUser(userCollectionPtr, user.Name, user.PassWord)
@@ -109,7 +110,7 @@ func registerInitialUsers(collectionPtr *mongo.Collection, initialRegisteredUser
 
 func isUserNameMatchesPassword(collectionPtr *mongo.Collection, name string, passWord string) bool {
 	var usersFound []*User
-	usersFound=usersPtrWithGivenName(collectionPtr,name)
+	usersFound = usersPtrWithGivenName(collectionPtr, name)
 	fmt.Println("usersFound", len(usersFound))
 	for i := 0; i < len(usersFound); i++ {
 		if usersFound[i].PassWord == passWord {
@@ -126,15 +127,23 @@ func usersPtrWithGivenName(collectionPtr *mongo.Collection, name string) []*User
 		fmt.Println("collection find error")
 	}
 
-	usersCursor.All(context.Background(), &usersFound)
+	err = usersCursor.All(context.Background(), &usersFound)
 
-	return  usersFound
+	return usersFound
+}
+
+func userExists(collectionPtr *mongo.Collection, name string) bool {
+	users :=usersPtrWithGivenName(collectionPtr,name)
+	if len(users)==0{
+		return false
+	}
+	return  true
 }
 
 func registerNewUser(collectionPtr *mongo.Collection, name string, passWord string) error {
 	var previousUsersWithThisName []*User
-	previousUsersWithThisName=usersPtrWithGivenName(collectionPtr,name)
-	if len(previousUsersWithThisName) !=0 {
+	previousUsersWithThisName = usersPtrWithGivenName(collectionPtr, name)
+	if len(previousUsersWithThisName) != 0 {
 		return errors.New("this users name has exists, please change your name")
 	}
 	insertResult, err := collectionPtr.InsertOne(context.Background(), newUser(name, passWord))
